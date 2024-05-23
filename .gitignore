@@ -1,0 +1,5 @@
+.env*
+
+/.deta
+
+/node_modules
