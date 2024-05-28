@@ -111,6 +111,13 @@ async function setRemember(level, data) {
 //     return updates.length > 0 ? 'Updated' : 'No updates';
 // }
 
+async function getProductsOfLevel(level) {
+    const connection = await initDatabase();
+    const [rows] = await connection.execute('SELECT p.id_prod_disp, p.nombre_prod_disp, p.cantidad, p.max FROM productosDisponibles p INNER JOIN nivelProductosDisp npd ON p.id_prod_disp = npd.id_prod_disp WHERE npd.id_nivel = ?', [level]);
+    await connection.end();
+    return rows;
+}
+
 async function createResult(data) {
     const connection = await initDatabase();
     const fields = ['fecha', 'id_nivel', 'nombre_persona'];
@@ -276,9 +283,9 @@ async function getCurrentProduct(name) {
     return rows.length ? rows[0].cantidad : null;
 }
 
-async function getShelvesConfig() {
+async function getShelvesConfig(level) {
     const connection = await initDatabase();
-    const [rows] = await connection.execute('SELECT * FROM estanteria');
+    const [rows] = await connection.execute('SELECT * FROM nivelProductosDisp WHERE id_nivel = ?', [level]);
     await connection.end();
     return rows;
 }
@@ -288,6 +295,7 @@ module.exports = {
     getLevel,
     getRemember,
     setRemember,
+    getProductsOfLevel,
     createResult,
     updateResult,
     searchResults,

@@ -72,6 +72,10 @@ app.put('/level', async function (req, res) {
     res.send();
 });
 
+app.get('/level/:id/products', async function (req, res) {
+    res.send(await db.getProductsOfLevel(req.params.id));
+});
+
 app.get('/result', async function (req, res) {
     if (req.query.name) {
         res.send(await db.searchResults(req.query.name));
@@ -95,7 +99,7 @@ app.put('/result/:id', async function (req, res) {
 });
 
 app.get('/shelvesConfig', async function (req, res) {
-    res.send(await db.getShelvesConfig());
+    res.send(await db.getShelvesConfig(req.query.id));
 });
 
 // Start the server
