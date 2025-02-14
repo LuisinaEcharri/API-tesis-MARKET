@@ -89,3 +89,77 @@ CREATE TABLE "resultadoProductosDisp" (
   CONSTRAINT "resultadoProductosDisp_producdisp_FK" FOREIGN KEY ("id_producto_disponible") REFERENCES "producto_disponible" ("id_producto_disponible"),
   CONSTRAINT "resultadoProductosDisp_resultado_FK" FOREIGN KEY ("id_result") REFERENCES "resultado" ("id_result")
 );
+
+insert estanteria:
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(1, 25, 0, '1');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(2, 25, 0, '2');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(3, 25, 0, '3');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(4, 25, 0, '4');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(5, 25, 0, '5');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(6, 25, 0, '6');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(7, 25, 0, '7');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(8, 25, 0, '8');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(9, 25, 0, '9');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(10, 25, 0, '10');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(11, 25, 0, '11');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(12, 25, 0, '12');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(13, 25, 0, '13');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(14, 25, 0, '14');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(15, 25, 0, '15');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(16, 25, 0, '16');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(17, 25, 0, '17');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(18, 25, 0, '18');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(19, 25, 0, '19');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(20, 25, 0, '20');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(21, 25, 0, '21');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(22, 25, 0, '22');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(23, 25, 0, '23');
+INSERT INTO defaultdb.estanteria
+(id_estanteria, max, cantidad, gondola)
+VALUES(24, 25, 0, '24');

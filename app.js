@@ -55,57 +55,22 @@ app.get('/level/remember/:id', async function(req, res) {
     res.send(await db.getRemember(req.params.id));
 });
 
-
 app.put('/level', async function(req, res) {
     let index = Object.keys(req.body);
-    let set = new Set([]);
-
     if (await db.existsLevel(req.query.id)) {
-        index.forEach(async e => {
-            console.log(`Actualizando nivel: ${req.query.id}, clave: ${e}, valor: ${req.body[e]}`);
-            console.log(JSON.stringify(req.body));
-            await db.updateLevel(req.query.id, e, req.body[e])
-            await db.updateToRemember(req.query.id, req.body, false)
-        });
+        for (let e of index) {
+            await db.updateLevel(req.query.id, e, req.body[e]);
+            await db.updateToRemember(req.query.id, req.body, false);
+        }
     } else {
-        await db.createLevel(req.query.id)
-        index.forEach(async e => {
-            console.log(`Creando nivel: ${req.query.id}, clave: ${e}, valor: ${req.body[e]}`);
-            console.log(JSON.stringify(req.body));
-            await db.updateLevel(req.query.id, e, req.body[e])
-            await db.updateToRemember(req.query.id, req.body, true)
-        });
+        await db.createLevel(req.query.id);
+        for (let e of index) {
+            await db.updateLevel(req.query.id, e, req.body[e]);
+            await db.updateToRemember(req.query.id, req.body, true);
+        }
     }
-    res.send()
-})
-
-// app.put('/level', async function(req, res) {
-//     const levelId = req.query.id;
-//     const requestBody = req.body;
-
-//     console.log(JSON.stringify(requestBody));
-
-//     try {
-//         const index = Object.keys(requestBody);
-
-//         if (await db.existsLevel(levelId)) {
-//             for (const e of index) {
-//                 console.log(`Actualizando nivel: ${levelId}, clave: ${e}, valor: ${requestBody[e]}`);
-//                 console.log(JSON.stringify(requestBody));
-//                 await db.updateLevel(levelId, e, requestBody[e]);
-//                 await db.updateToRemember(levelId, requestBody, false);
-//             }
-//         } else {
-//             await db.createLevel(levelId);
-//             for (const e of index) {
-//                 console.log(`Creando nivel: ${levelId}, clave: ${e}, valor: ${requestBody[e]}`);
-//                 console.log(JSON.stringify(requestBody));
-//                 await db.updateLevel(levelId, e, requestBody[e]);
-//                 await db.updateToRemember(levelId, requestBody, true);
-//             }
-//         }
-
-//         res.status(204).send(); // 204 No Content para PUT sin cuerpo de respuesta
+    res.send();
+});
 
 // app.get('/result/:name', async function(req, res) {
 //     if (req.params.name) {
