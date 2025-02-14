@@ -1,6 +1,8 @@
 const mysql = require('mysql2/promise');
 const fs = require('fs');
 const { isGeneratorObject } = require('util/types');
+const { config } = require('process');
+const { console } = require('inspector');
 
 async function initDatabase() {
     const connection = await mysql.createConnection({
@@ -15,148 +17,157 @@ async function initDatabase() {
     return connection;
 }
 
-///////////////////////////////////////////INSERCION DE PRODUCTOS CON IMG////////////////////////////////////////////////////////
-
-// // Función para insertar productos con imágenes
-// async function insertProductWithImage(productName, imagePath) {
-//     // Leer el archivo de imagen en un buffer
-//     const imageBuffer = fs.readFileSync(imagePath);
-    
-//     // Crear la conexión a la base de datos
-//     const connection = await mysql.createConnection({
-//                 host: 'mysql-vrmarket-pladema-ef62.d.aivencloud.com',
-//                 port: 26116,
-//                 user: 'avnadmin',
-//                 password: 'AVNS_BD6D-d03halBr0cMHzd',
-//                 database: 'defaultdb'
-//             });
-    
-//     // Ejecutar la consulta de inserción
-//     const [result] = await connection.execute(
-//         'INSERT INTO producto (nombre_prod, img) VALUES (?, ?)', 
-//         [productName, imageBuffer]
-//     );
-//     // Cerrar la conexión
-//     await connection.end();
-//     return result;
-// }
-
-// // Insertar los productos con las imágenes correspondientes
-// async function insertProducts() {
-//     try {
-//         let result;
-
-//         result = await insertProductWithImage('Producto A', 'img\\Aceites-Nueva-Etiqueta.jpg');
-//         console.log('Producto A insertado con éxito:', result);
-
-//         result = await insertProductWithImage('Producto B', 'img\\bottle.jpg');
-//         console.log('Producto B insertado con éxito:', result);
-
-//     } catch (err) {
-//         console.error('Error al insertar el producto:', err);
-//     }
-// }
-
-// // Llamar a la función para insertar los productos
-// insertProducts();
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+// Consulta SQL para obtener todos los productos y niveles
 async function getAll() {
     const connection = await initDatabase();
-    const [rows] = await connection.execute('SELECT * FROM nivel');
+    const [rows] = await connection.execute('SELECT n.id_nivel, n.nombre_nivel, n.dificultad,pd.id_producto_disponible, p.id_producto, p.nombre_prod, pd.cantidad,pd.max, e.id_estanteria, e.gondola FROM nivel n JOIN producto_disponible pd ON n.id_nivel = pd.id_nivel JOIN producto p ON pd.id_producto = p.id_producto JOIN producto_estanteria pe ON pe.id_nivel = n.id_nivel JOIN estanteria e ON e.id_estanteria = pe.id_estanteria');
+    // Crear un objeto para agrupar por niveles 
+    const niveles = {};
+
+    rows.forEach(row => {
+        const { id_nivel, nombre_nivel, dificultad, id_producto_disponible, id_producto, nombre_prod, cantidad, max, id_estanteria, gondola } = row;
+
+        // Si el nivel no existe en el objeto, lo creamos
+        if (!niveles[id_nivel]) {
+            niveles[id_nivel] = {
+                id_nivel: id_nivel,
+                nombre: nombre_nivel,
+                dificultad: dificultad,
+                availableProducts: [],
+                shelves: {} // Inicializamos shelves como un objeto
+            };
+        }
+        // Agregamos el producto al array de productos disponibles en ese nivel
+        niveles[id_nivel].availableProducts.push({
+            id_producto_disponible: id_producto_disponible,
+            id_producto: id_producto,
+            nombre: nombre_prod,
+            cantidad: cantidad,
+            max: max
+        });
+
+        // Inicializamos el array de productos para la estantería si no existe
+        if (!niveles[id_nivel].shelves[id_estanteria]) {
+            niveles[id_nivel].shelves[id_estanteria] = {
+                id_estanteria: id_estanteria,
+                gondola: gondola,
+                productos: []
+            };
+        }
+
+
+    });
+
+    const [segunda] = await connection.execute('SELECT n.id_nivel,pe.id_estanteria, pe.id_producto_estanteria, pe.cant_producto FROM nivel n JOIN producto_estanteria pe ON n.id_nivel = pe.id_nivel JOIN producto p ON pe.id_producto = p.id_producto ORDER BY n.nombre_nivel');
+    segunda.forEach(row => {
+        const { id_nivel, id_estanteria, id_producto_estanteria, cant_producto } = row;
+        if (niveles[id_nivel] && niveles[id_nivel].shelves && niveles[id_nivel].shelves[id_estanteria]) {
+            niveles[id_nivel].shelves[id_estanteria].productos.push({
+                id_producto: id_producto_estanteria,
+                cantidad: cant_producto
+            });
+        }
+    });
     await connection.end();
-    return rows;
+    // Convertimos el objeto en un array de niveles
+    return Object.values(niveles);
+
 }
 
 async function getRemember(level) {
     const connection = await initDatabase();
-    const [rows] = await connection.execute('SELECT id_prod_disp FROM nivel WHERE id_nivel = ?', [level]);
-    await connection.end();
-    return rows;
+    const [results] = await connection.execute('SELECT pd.id_producto, pd.cantidad, pd.max, p.nombre_prod FROM producto_disponible pd JOIN producto p ON pd.id_producto = p.id_producto JOIN nivel n ON pd.id_nivel = n.id_nivel WHERE n.id_nivel = ?', [level]); // Pasar level como parámetro
+
+    if (results.length > 0) {
+        const availableProducts = {};
+
+        results.forEach(row => { // Usar results en lugar de rows
+            const { id_producto, cantidad, max, nombre_prod } = row;
+
+            if (!availableProducts[id_producto]) {
+                availableProducts[id_producto] = {
+                    id_producto: id_producto,
+                    cantidad_producto: cantidad,
+                    nombre: nombre_prod,
+                    max: max
+                };
+            }
+        });
+
+        await connection.end();
+        return Object.values(availableProducts);
+    }
+
+    await connection.end(); // Cerrar la conexión incluso si no hay resultados
+    return [];
 }
 
 async function getLevel(level) {
     const connection = await initDatabase();
-    const [rows] = await connection.execute('SELECT * FROM nivel WHERE id_nivel = ?', [level]);
+    const [rows] = await connection.execute('SELECT pe.id_estanteria, e.max, e.gondola,pe.id_producto, pe.id_producto_estanteria, pe.nombre, pe.cant_producto FROM producto_estanteria pe JOIN estanteria e ON pe.id_estanteria=e.id_estanteria JOIN producto p ON pe.id_producto = p.id_producto WHERE pe.id_nivel = ?', [level]);
+    const shelves = {};
+    rows.forEach(row => {
+        const { id_estanteria, max, gondola, id_producto, id_producto_estanteria, nombre, cant_producto } = row;
+        // Si la estantería no existe en el objeto, la creamos
+        if (!shelves[id_estanteria]) {
+            shelves[id_estanteria] = {
+                id_estanteria: id_estanteria,
+                max: max,
+                gondola: gondola,
+                productos: []
+            };
+        }
+        // Agregamos el producto a la estantería correspondiente
+        shelves[id_estanteria].productos.push({
+            id_producto_estanteria: id_producto_estanteria,
+            id_producto: id_producto,
+            nombre: nombre,
+            cantidad: cant_producto
+        });
+    });
     await connection.end();
-    return rows;
+    return Object.values(shelves);
 }
 
-// PROBAR ID_PROD_DISP QUE NO EXISTAAAAAAAAA
-// updatea solo id_prod_disp. Si el level que fue pasado por parametro no existe,inserta la tupla (con id_estanteria si es especificado en el body, sino por defecto se pone id_estanteria=1)
-// aclaracion: si en el body se le pasa id_estanteria y en los parametro un nivel que ya existe, id_estanteria no se va a modificar, id_prod_disp si
 async function setRemember(level, data) {
+    // Crear la conexión a MySQL
+
     const connection = await initDatabase();
-    const [levelRows] = await connection.execute('SELECT * FROM nivel WHERE id_nivel = ?', [level]);
-    let res= 0;
-    if (levelRows.length === 0) {
-        const idEstanteria = data.id_estanteria !== undefined && data.id_estanteria !== null ? data.id_estanteria : 1;
-        res = await connection.execute('INSERT INTO nivel (id_nivel, nombre_nivel, dificultad, id_estanteria, id_prod_disp) VALUES (?, ?, ?, ?, ?)', [level, `Nivel ${level}`, parseInt(level), idEstanteria, data.id_prod_disp]);
-    } else {
-        res = await connection.execute('UPDATE nivel SET id_prod_disp = ? WHERE id_nivel = ?', [data.id_prod_disp, level]);
+    // Preparar los datos que se van a actualizar
+    const rememberProducts = data.remember.availableProducts; // Suponemos que data.remember es un array de productos
+
+    // Hacer la actualización por cada producto en el nivel
+    for (let product of rememberProducts) {
+        const { id_producto, cantidad } = product; // Asumiendo que estos campos existen en los datos
+
+        // Actualizar el producto en la base de datos MySQL
+        const query = 'UPDATE producto_disponible SET cantidad = ? WHERE id_producto = ? AND id_nivel = ?';
+
+        await connection.execute(query, [cantidad, id_producto, level]);
     }
-    await connection.end();
-    return res;
-}
 
-// updatea id_estanteria e id_prod_disp de determinado nivel
-// async function setRemember(level, data) {
-//     const connection = await initDatabase();
-//     const updates = [];
-//     if (data.id_prod_disp != null) updates.push(connection.execute('UPDATE nivel SET id_prod_disp = ? WHERE id_nivel = ?', [JSON.stringify(data.id_prod_disp), level]));
-//     if (data.id_estanteria != null) updates.push(connection.execute('UPDATE nivel SET id_estanteria = ? WHERE id_nivel = ?', [data.id_estanteria, level]));
-//     await Promise.all(updates);
-//     await connection.end();
-//     return updates.length > 0 ? 'Updated' : 'No updates';
-// }
-
-async function getProductsOfLevel(level) {
-    const connection = await initDatabase();
-    const [rows] = await connection.execute('SELECT p.id_prod_disp, p.nombre_prod_disp, p.cantidad, p.max FROM productosDisponibles p INNER JOIN nivelProductosDisp npd ON p.id_prod_disp = npd.id_prod_disp WHERE npd.id_nivel = ?', [level]);
+    // Cerrar la conexión
     await connection.end();
-    return rows;
+
+    // Retornar true si la operación fue exitosa
+    return true;
 }
 
 async function createResult(data) {
+    // Inserta en la tabla RESULTADO en SQL
     const connection = await initDatabase();
-    const fields = ['fecha', 'id_nivel', 'nombre_persona'];
-    const values = ['NOW()', '?', '?'];
-    const params = [data.id_nivel, data.nombre_persona];
-
-    // Helper function to handle optional fields
-    function addOptionalField(fieldName, fieldValue) {
-        if (fieldValue !== undefined) {
-            fields.push(fieldName);
-            values.push('?');
-            params.push(fieldValue !== null ? fieldValue : null);
-        }
-    }
-
-    // Add optional fields
-    addOptionalField('id_producto', data.id_producto);
-    addOptionalField('porcentaje', data.porcentaje);
-    addOptionalField('tiempo', data.tiempo);
-    addOptionalField('tiempoEstimulo', data.tiempoEstimulo);
-
-    const query = `INSERT INTO resultado (${fields.join(', ')}) VALUES (${values.join(', ')})`;
-    const res = await connection.execute(query, params);
-    const insertId = res[0].insertId;
-
+    const [result] = await connection.execute('INSERT INTO RESULTADO(id_nivel, id_producto, date, name, tiempo) VALUES( ? , ? , ? , ? , ? , ? )', [
+        data.level, // id_nivel
+        data.id_producto, // id_prod_disp   // aca deberia pasar cada id???????????????????????????????????????????
+        new Date(), // date (fecha actual)
+        data.name, // name (nombre del resultado)
+        0, // tiempo (inicialmente en 0)
+    ]);
+    const lastInsertId = await connection.execute('SELECT LAST_INSERT_ID() LIMIT 1');
     await connection.end();
-    return insertId;
+    // Devuelve el id del resultado insertado
+    return lastInsertId;
 }
-
-// async function updateResult(id, data) {
-//     const connection = await initDatabase();
-//     const updates = [];
-//     if (data.porcentaje != null) updates.push(connection.execute('UPDATE resultado SET porcentaje = ? WHERE id_result = ?', [data.porcentaje, id]));
-//     if (data.tiempo != null) updates.push(connection.execute('UPDATE resultado SET tiempo = ? WHERE id_result = ?', [data.tiempo, id]));
-//     if (data.tiempo_estimulo != null) updates.push(connection.execute('UPDATE resultado SET tiempo_estimulo = ? WHERE id_result = ?', [data.tiempo_estimulo, id]));
-//     await Promise.all(updates);
-//     await connection.end();
-//     return updates.length > 0 ? 'Updated' : 'No updates';
-// }
 
 async function updateResult(id, data) {
     const connection = await initDatabase();
@@ -172,8 +183,15 @@ async function updateResult(id, data) {
         if (data.tiempo_estimulo != null) {
             updates.push(connection.execute('UPDATE resultado SET tiempo_estimulo = ? WHERE id_result = ?', [data.tiempo_estimulo, id]));
         }
-        if (data.id_producto != null) {
-            updates.push(connection.execute('UPDATE resultado SET id_producto = ? WHERE id_result = ?', [data.id_producto, id]));
+        if (data.productos != null) {
+            let prod = {};
+            if (data.productos) {
+                data.productos.forEach((x, index) => {
+                    prod[index] = x.slice(0, x.indexOf("("));
+                });
+            }
+            const productosStr = JSON.stringify(prod);
+            updates.push(connection.execute('UPDATE resultado SET id_producto = ? WHERE id_result = ?', [productosStr, id]));
         }
         await Promise.all(updates);
     }
@@ -183,314 +201,247 @@ async function updateResult(id, data) {
 
 async function searchResults(name) {
     const connection = await initDatabase();
-    const [rows] = name
-        ? await connection.execute('SELECT * FROM resultado WHERE nombre_persona = ?', [name])
-        : await connection.execute('SELECT * FROM resultado ORDER BY fecha DESC LIMIT 10');
+    const resultados = {};
+    if (name) {
+        const [results] = await connection.execute('SELECT r.id_result, r.fecha, r.nombre_persona, r.tiempo, n.nombre_nivel FROM resultado r JOIN nivel n ON r.id_nivel = n.id_nivel WHERE nombre_persona = ? ORDER BY fecha DESC LIMIT 10', [name]);
+
+
+        if (results && results.length > 0) { // Verifica si results existe y tiene elementos
+            results.forEach(row => {
+                const { id_result, fecha, nombre_persona, tiempo, nombre_nivel } = row;
+
+                if (!resultados[id_result]) {
+                    resultados[id_result] = {
+                        id: id_result,
+                        name: nombre_persona,
+                        level: nombre_nivel,
+                        fecha_inicio: fecha,
+                        tiempo: tiempo
+                    };
+                }
+            });
+        }
+    } else {
+        const [results] = await connection.execute('SELECT r.id_result, r.fecha, r.nombre_persona, r.tiempo, n.nombre_nivel FROM resultado r JOIN nivel n ON r.id_nivel = n.id_nivel ORDER BY fecha DESC LIMIT 10');
+
+
+        if (results && results.length > 0) { // Verifica si results existe y tiene elementos
+            results.forEach(row => {
+                const { id_result, fecha, nombre_persona, tiempo, nombre_nivel } = row;
+
+                if (!resultados[id_result]) {
+                    resultados[id_result] = {
+                        id: id_result,
+                        nombre_persona: nombre_persona,
+                        id_nivel: nombre_nivel,
+                        fecha_inicio: fecha,
+                        tiempo: tiempo
+                    };
+                }
+            });
+        }
+    }
+
     await connection.end();
-    return rows;
+    return Object.values(resultados);
 }
 
 async function updateLevel(level, shelf, products) {
     const connection = await initDatabase();
-    await connection.execute('UPDATE estanteria SET productos = ? WHERE id_estanteria = ?', [JSON.stringify(products), shelf]);
+
+    // Obtener el ID de la estantería (góndola) para el nivel y estantería dados
+    // const [rows] = await connection.execute('SELECT  id_producto_disponible FROM producto_estanteria pe JOIN estanteria e ON pe.id_estanteria = e.id_estanteria WHERE id_nivel = ? AND gondola = ? ', [level, parseInt(shelf)]);
+
+    // const id = rows[0].id_producto_disponible;
+
+    // Crear un arreglo con los productos a actualizar
+
+    let keys = Object.keys(products);
+
+    for (let e of keys) {
+        if (products[e] > 0) {
+            let cant = await getCurrentProduct(e);
+            if (!cant)
+                cant = 1;
+            for (let i = 0; i < products[e]; i++) {
+                nombre = (e + "-" + cant)
+                if (nombre != '') {
+                    const [existe] = await connection.execute(
+                        'SELECT pe.id_producto FROM producto_estanteria pe JOIN producto p ON pe.id_producto=p.id_producto WHERE pe.id_estanteria = ? AND pe.id_nivel = ? AND p.nombre_prod = ?', [parseInt(shelf), level, e]
+                    );
+
+                    if (existe && existe.length > 0) {
+                        // Si existe, actualizar nombre y cantidad
+                        await connection.execute(
+                            'UPDATE producto_estanteria SET nombre = ?, cant_producto = ? WHERE id_estanteria = ? AND id_producto = ? AND id_nivel = ?', [nombre, cant, parseInt(shelf), existe[0].id_producto, level]
+                        );
+                    } else {
+                        const [prod] = await connection.execute(
+                            'SELECT id_producto FROM producto  WHERE nombre_prod = ?', [e]
+                        );
+                        let producto
+                        prod.forEach(row => {
+                            const { id_producto } = row;
+                            console.log(id_producto);
+                            producto = id_producto;
+                        });
+                        // Si no existe, insertar (simulando el merge)
+                        console.log(producto);
+                        console.log(nombre);
+                        console.log(cant);
+                        console.log(level);
+                        console.log(parseInt(shelf));
+                        await connection.execute(
+                            'INSERT INTO producto_estanteria (id_estanteria, id_producto, nombre, cant_producto, id_nivel) VALUES (?, ?, ?, ?,?)', [parseInt(shelf), producto, nombre, cant, level]
+                        );
+                    }
+                }
+            }
+        }
+
+    }
     await connection.end();
 }
 
 async function existsLevel(level) {
     const connection = await initDatabase();
-    const [rows] = await connection.execute('SELECT 1 FROM nivel WHERE id_nivel = ?', [level]);
+    // Paso 1: Consultar si el nivel existe en la tabla 'nivel'
+    const [rows] = await connection.execute(
+        `SELECT 1 FROM nivel WHERE id_nivel = ? LIMIT 1`, [level]
+    );
     await connection.end();
+    // Paso 2: Si la consulta devuelve algún resultado, el nivel existe
     return rows.length > 0;
+
 }
 
 async function createLevel(level) {
     const connection = await initDatabase();
-    await connection.execute('INSERT INTO nivel (id_nivel, nombre_nivel, dificultad, id_estanteria) VALUES (?, ?, ?, ?)', [level, `Nivel ${level}`, parseInt(level), null]);
-    for (let i = 1; i <= 24; i++) {
-        await connection.execute('INSERT INTO estanteria (id_estanteria, max, cantidad, id_producto) VALUES (?, ?, ?, ?)', [i, 0, 0, null]);
-    }
+
+    // Paso 1: Crear el nivel
+    await connection.execute(
+        `INSERT INTO nivel (id_nivel, dificultad, nombre_nivel) 
+         VALUES (?, ?, ?)`, [level, parseInt(level), "Nivel " + level]
+    );
+
+    // Cerrar la conexión
     await connection.end();
 }
 
 async function updateToRemember(level, products, newLevel) {
-    const connection = await getConnection();
-    let set = new Set();
-    let keys = Object.keys(products);
+    const connection = await initDatabase();
     let productsList = {};
-
-    // Leer productos disponibles del nivel
+    let availableProducts = {};
+    console.log('entro 334');
     const [availableProductsRows] = await connection.execute(
-        `SELECT p.id_prod_disp, p.nombre_prod_disp, p.cantidad 
-        FROM productosDisponibles p
-        INNER JOIN nivelProductosDisp npd ON p.id_prod_disp = npd.id_prod_disp
-        WHERE npd.id_nivel = ?`, [level]);
-
-    let availableProducts = availableProductsRows;
-
-    // Combinar productos
-    keys.forEach(x => {
-        Object.keys(products[x]).forEach(y => {
-            if (productsList.hasOwnProperty(y)) {
-                productsList[y] += parseInt(products[x][y]);
-            } else {
-                productsList[y] = parseInt(products[x][y]);
+        `SELECT pd.id_producto_disponible, pd.id_producto, p.nombre_prod, pd.cantidad, p.max
+FROM producto_disponible pd JOIN producto p ON p.id_producto = pd.id_producto
+WHERE pd.id_nivel = ?`, [level]
+    );
+    if (availableProductsRows && availableProductsRows > 0) { // Verifica si results existe y tiene elementos
+        availableProductsRows.forEach(row => {
+            const { id_producto_disponible, id_producto, nombre_prod, cantidad, max } = row;
+            if (!availableProducts[id_producto]) {
+                console.log('entro345')
+                availableProducts[id_producto] = {
+                    // Leer productos disponibles del nivel (optimizado)
+                    id_producto: id_producto,
+                    id_producto_disponible: id_producto_disponible,
+                    nombre_prod: nombre_prod,
+                    cantidad: cantidad,
+                    max: max // Incluir la cantidad máxima desde la base de datos
+                }
+                console.log(nombre_prod);
             }
         });
-    });
+        // Procesar la lista de productos (sin cambios)
+        Object.keys(products).forEach(x => {
+            Object.keys(products[x]).forEach(y => {
+                productsList[y] = (productsList[y] || 0) + parseInt(products[x][y]);
+            });
+        });
 
-    let result;
-    if (newLevel) {
-        result = Object.keys(productsList).filter(y => productsList[y] != 0).map(x => ({ nombre: x, cantidad: 0, max: productsList[x] }));
-    } else {
-        result = Object.keys(productsList).filter(y => productsList[y] != 0).map(x => {
-            let prod = availableProducts.find(y => y.nombre_prod_disp === x);
-            if (prod) {
-                return { id_prod_disp: prod.id_prod_disp, nombre: x, cantidad: prod.cantidad > productsList[x] ? productsList[x] : prod.cantidad, max: productsList[x] };
-            } else {
-                return { nombre: x, cantidad: 0, max: productsList[x] };
+        console.log(newLevel, productsList);
+
+        let result;
+        console.log('entro365');
+        if (newLevel) {
+            result = Object.keys(productsList).filter(y => productsList[y] != 0).map(x => ({ nombre: x, cantidad: 0, max: productsList[x] }));
+        } else {
+            result = Object.keys(productsList).filter(y => productsList[y] != 0).map(x => {
+                let prod = availableProducts.find(y => y.nombre_prod === x);
+                if (prod) {
+                    return {
+                        id_producto: prod.id_producto, // Incluir el ID del producto
+                        nombre: x,
+                        cantidad: Math.min(prod.cantidad, productsList[x]), // Usar Math.min para evitar exceder la cantidad disponible
+                        max: productsList[x]
+                    };
+                } else {
+                    return { nombre: x, cantidad: 0, max: productsList[x] };
+                }
+            });
+        }
+
+        // Actualizar la base de datos (optimizado y con manejo de transacciones)
+
+        if (result.length != 0) {
+            console.log('entro87');
+            for (const prod of result) {
+                if (prod.id_productop) {
+                    // Actualizar producto existente
+                    await connection.execute(
+                        `UPDATE producto_disponible
+                        SET cantidad = ?, max = ? 
+                        WHERE id_producto = ?`, [prod.cantidad, prod.max, prod.id_producto]
+                    );
+                } else {
+                    console.log('entro 397')
+                        // Insertar nuevo producto y relación nivel-producto
+                    await connection.execute(
+                        `INSERT INTO producto_disponible (nombre_prod, cantidad, max) 
+                        VALUES (?, ?, ?)`, [prod.nombre, prod.cantidad, prod.max]
+                    );
+                }
             }
-        });
-    }
 
-    // Actualizar la base de datos
-    if (result.length != 0) {
-        const updateQueries = result.map(async (prod) => {
-            // Insertar o actualizar productos disponibles
-            const [prodResult] = await connection.execute(
-                `INSERT INTO productosDisponibles (nombre_prod_disp, cantidad, max) VALUES (?, ?, ?)
-                ON DUPLICATE KEY UPDATE cantidad = VALUES(cantidad), max = VALUES(max)`,
-                [prod.nombre, prod.cantidad, prod.max]
-            );
-            const prodId = prod.id_prod_disp || prodResult.insertId;
+        }
 
-            // Insertar relación nivel - productosDisponibles
-            await connection.execute(
-                `INSERT INTO nivelProductosDisp (id_nivel, id_prod_disp) VALUES (?, ?)
-                ON DUPLICATE KEY UPDATE id_nivel = VALUES(id_nivel), id_prod_disp = VALUES(id_prod_disp)`,
-                [level, prodId]
-            );
-        });
-        await Promise.all(updateQueries);
     }
     await connection.end();
 }
-
-
 async function getCurrentProduct(name) {
     const connection = await initDatabase();
-    const [rows] = await connection.execute('SELECT cantidad FROM productosDisponibles WHERE nombre_prod_disp = ?', [name]);
+
+    const [rows] = await connection.execute(
+        "SELECT current FROM producto WHERE nombre_prod = ?", [name]
+    );
     await connection.end();
-    return rows.length ? rows[0].cantidad : null;
+    if (rows.length > 0) {
+        return rows[0].current; // Devuelve el valor de 'current'
+    } else {
+        return null; // Devuelve null si no se encuentra el producto
+    }
 }
 
-async function getShelvesConfig(level) {
+
+async function getShelvesConfig() {
+
     const connection = await initDatabase();
-    const [rows] = await connection.execute('SELECT * FROM nivelProductosDisp WHERE id_nivel = ?', [level]);
+    const query = 'SELECT id_estanteria, max FROM estanteria ORDER BY id_estanteria';
+
+    const [rows] = await connection.execute(query);
     await connection.end();
-    return rows;
+
+    let arr = [];
+    rows.forEach(row => {
+        arr.push({
+            id_estanteria: row.id_estanteria,
+            max: row.max,
+        });
+    });
+    return arr;
+
 }
 
-module.exports = {
-    getAll,
-    getLevel,
-    getRemember,
-    setRemember,
-    getProductsOfLevel,
-    createResult,
-    updateResult,
-    searchResults,
-    updateLevel,
-    existsLevel,
-    createLevel,
-    updateToRemember,
-    getCurrentProduct,
-    getShelvesConfig
-};
-
-
-
-// const { initializeApp, applicationDefault, cert } = require('firebase-admin/app');
-// const { getFirestore, Timestamp, FieldValue ,addDoc, updateDoc,doc} = require('firebase-admin/firestore');
-
-
-// const db = getFirestore();
-
-// async function getAll(){
-//     let arr = []
-//     const snapshot = await db.collection('level').get()
-//     snapshot.forEach(res=>{
-//         arr.push(res.data())
-//     });
-//     return arr
-// }
-
-// async function getRemember(level){   
-//     const data = db.collection('level').doc(level);
-//     const doc = await data.get();
-//     if (!doc.exists) {
-//         return []
-//     } else {
-//         return doc.data().availableProducts
-//     }
-    
-// }
-
-
-// async function getLevel(level){
-//     let arr = []
-//     const levelRef = await db.collection('level').doc(level).collection("shelves").get();
-//     levelRef.forEach(res=>{
-//         arr.push(res.data())
-//     });
-//     return arr
-// }
-
-// async function setRemember(level,data){
-//     const levelRef = db.collection('level').doc(level);
-//     const res = await levelRef.update({availableProducts: data.remember});
-//     return res
-
-// }
-
-// async function createResult(data){
-//     const docRef = await db.collection("results").add({level:data.level,date:new Date(),name:data.name,tiempo:0,productos:FieldValue.arrayUnion({})});
-//     return docRef.id
-
-// }
-
-// async function updateResult(id,data){
-//     const docRef = db.collection("results").doc(id)
-
-//     console.log(data)
-
-//     if(data.percentage != null){
-//         let res = docRef.update({percentage:data.percentage});
-//         return res
-//     }else{
-//         let prod = {}
-//         if(data.productos){
-//             data.productos.forEach((x,index)=>{
-//                 prod[index]=x.slice(0,x.indexOf("("))
-//             })
-//         }
-//         console.log(data);
-//         let res = docRef.update({date:Timestamp.now(),tiempo:data.time,productos:prod, tiempoEstimulo:data.stimulusTime});
-//         return res
-//     }
-// }
-
-
-// async function searchResults(name){
-//     let arr = []
-//     let docRef;
-//     if(name)
-//        docRef = await db.collection("results").where('name', '==', name).docs();
-//     else
-//     docRef = await db.collection("results").orderBy('date','desc').limit(10).get();    
-//     docRef.forEach(res=>{
-//         arr.push(res.data())
-//     });
-//     return arr;
-
-// }
-
-// async function updateLevel(level,shelf,products){
-//     let id = null
-//     //const levelExist = await (await db.collection('level').doc(level).get()).exists
-//     const docRef = await db.collection('level').doc(level).collection("shelves").where("gondola", "==", parseInt(shelf)).get()
-//     docRef.forEach(res=>{
-//         id = res.id
-//     });
-//     let arr = []
-//     let keys = Object.keys(products)
-//     for (let e of keys){
-//         if( products[e] > 0){
-//             let cant = await getCurrentProduct(e);
-//             if(!cant)
-//                 cant = 1;
-//             for(let i = 0; i < products[e]; i++){
-//                 arr.push(e+"-"+cant)
-//             }
-            
-//         }
-//     }
-//     //if(arr.length != 0){
-//         await db.collection('level').doc(level).collection("shelves").doc(id).set({productos:arr},{merge: true});
-//   //  }
-    
-// }
-
-// async function existsLevel(level){
-//     return (await db.collection('level').doc(level).get()).exists;
-// }
-
-
-// async function createLevel(level){
-//     await db.collection('level').doc(level).set({"dificultad":parseInt(level),"name":"Nivel "+level,availableProducts:[]})
-//     for(let i=1;i<=24;i++)
-//         await db.collection('level').doc(level).collection('shelves').add({gondola:i,productos:[]})
-// }
-
-// async function updateToRemember(level,products, newLevel){
-//     let set = new Set();
-//     let keys = Object.keys(products)
-//     let doc = (await db.collection('level').doc(level).get()).data()
-//     let productsList = {}
-
-//     keys.forEach(x =>{
-//         Object.keys(products[x]).forEach(y => {
-//            if(productsList.hasOwnProperty(y)){
-//                 productsList[y] += parseInt(products[x][y])
-//            } else {
-//                 productsList[y] = parseInt(products[x][y])
-//            }
-//         })
-//     });
-//     // Object.keys(productsList).forEach(x => {
-//     //     let prod = doc.availableProducts.find(y => y.nombre == x)
-//     //     if(prod){
-//     //          productsList[x] =  prod.cantidad > productsList[x] ? productsList[x] : prod.cantidad
-//     //     }
-//     // })
-
-//     console.log(newLevel,productsList);
-//     let result
-//     if(newLevel){
-//         result = Object.keys(productsList).filter(y => productsList[y] != 0).map(x => ({nombre:x,cantidad:0,max:productsList[x]}));
-//     } else {
-        
-//         result = Object.keys(productsList).filter(y => productsList[y] != 0).map(x => {
-//             let prod = doc.availableProducts.find(y => y.nombre == x)
-//             if(prod){
-//                 return {nombre:x,cantidad:prod.cantidad > productsList[x] ? productsList[x] :prod.cantidad,max:productsList[x]}
-//             } else {
-//                 return {nombre:x,cantidad:0 ,max:productsList[x]}
-//             }
-//             }
-//         );
-//     }
-//     if(result.length != 0){
-//         await db.collection('level').doc(level).set({availableProducts:result},{merge: true});
-//     }
-// }
-
-// async function getCurrentProduct(name){
-//     let ref = await db.collection("products").where("name", "==", name ).get()
-//     let current;
-//     ref.forEach(res=>{
-//         current = res.data().current;
-//     });
-//     return current
-
-// }
-
-// async function getShelvesConfig(){
-//     let arr = []
-//     const levelRef = await db.collection('shelves').get();
-//     levelRef.forEach(res=>{
-//         arr.push(res.data())
-//     });
-//     return arr
-// }
-
-// module.exports = {getAll,getLevel,getRemember,setRemember,createResult,updateResult,searchResults,updateLevel,existsLevel,createLevel,updateToRemember,getShelvesConfig}
+module.exports = { getAll, getLevel, getRemember, setRemember, createResult, updateResult, searchResults, updateLevel, existsLevel, createLevel, updateToRemember, getShelvesConfig }

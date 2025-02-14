@@ -1,0 +1,91 @@
+-- defaultdb.estanteria definition
+
+CREATE TABLE "estanteria" (
+  "id_estanteria" int NOT NULL AUTO_INCREMENT,
+  "max" int NOT NULL,
+  "cantidad" int NOT NULL,
+  PRIMARY KEY ("id_estanteria")
+);
+
+
+-- defaultdb.nivel definition
+
+CREATE TABLE "nivel" (
+  "id_nivel" int NOT NULL,
+  "nombre_nivel" varchar(50) NOT NULL,
+  "dificultad" int NOT NULL,
+  PRIMARY KEY ("id_nivel")
+);
+
+
+-- defaultdb.producto definition
+
+CREATE TABLE "producto" (
+  "id_producto" int NOT NULL AUTO_INCREMENT,
+  "nombre_prod" varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+  "img" mediumblob,
+  PRIMARY KEY ("id_producto")
+);
+
+
+-- defaultdb.producto_disponible definition
+
+CREATE TABLE "producto_disponible" (
+  "id_producto_disponible" int NOT NULL,
+  "nombre_prod_disp" varchar(50) NOT NULL,
+  "cantidad" int NOT NULL DEFAULT '0',
+  "max" int NOT NULL DEFAULT '25',
+  "id_producto" int NOT NULL,
+  "id_nivel" int NOT NULL,
+  PRIMARY KEY ("id_producto_disponible"),
+  KEY "productoDisponible_nivel_FK" ("id_nivel"),
+  KEY "productoDisponible_producto_FK" ("id_producto"),
+  CONSTRAINT "productoDisponible_nivel_FK" FOREIGN KEY ("id_nivel") REFERENCES "nivel" ("id_nivel"),
+  CONSTRAINT "productoDisponible_producto_FK" FOREIGN KEY ("id_producto") REFERENCES "producto" ("id_producto")
+);
+
+
+-- defaultdb.producto_estanteria definition
+
+CREATE TABLE "producto_estanteria" (
+  "id_producto_estanteria" int NOT NULL,
+  "id_estanteria" int NOT NULL,
+  "id_producto" int NOT NULL,
+  "cant_producto" int DEFAULT NULL,
+  "id_nivel" int NOT NULL,
+  PRIMARY KEY ("id_producto_estanteria"),
+  KEY "productoEstanteria_estanteria_FK" ("id_estanteria"),
+  KEY "productoEstanteria_nivel_FK" ("id_nivel"),
+  KEY "productoEstanteria_producto_FK" ("id_producto"),
+  CONSTRAINT "productoEstanteria_estanteria_FK" FOREIGN KEY ("id_estanteria") REFERENCES "estanteria" ("id_estanteria"),
+  CONSTRAINT "productoEstanteria_nivel_FK" FOREIGN KEY ("id_nivel") REFERENCES "nivel" ("id_nivel"),
+  CONSTRAINT "productoEstanteria_producto_FK" FOREIGN KEY ("id_producto") REFERENCES "producto" ("id_producto")
+);
+
+
+-- defaultdb.resultado definition
+
+CREATE TABLE "resultado" (
+  "id_result" int NOT NULL AUTO_INCREMENT,
+  "fecha" datetime NOT NULL,
+  "id_nivel" int NOT NULL,
+  "nombre_persona" varchar(50) NOT NULL,
+  "porcentaje" double DEFAULT NULL,
+  "tiempo" double DEFAULT NULL,
+  "tiempo_estimulo" double DEFAULT NULL,
+  PRIMARY KEY ("id_result"),
+  KEY "resultado_nivel_FK" ("id_nivel"),
+  CONSTRAINT "resultado_nivel_FK" FOREIGN KEY ("id_nivel") REFERENCES "nivel" ("id_nivel")
+);
+
+
+-- defaultdb.resultadoProductosDisp definition
+
+CREATE TABLE "resultadoProductosDisp" (
+  "id_result" int NOT NULL,
+  "id_producto_disponible" int NOT NULL,
+  PRIMARY KEY ("id_result","id_producto_disponible"),
+  KEY "resultadoProductosDisp_producdisp_FK" ("id_producto_disponible"),
+  CONSTRAINT "resultadoProductosDisp_producdisp_FK" FOREIGN KEY ("id_producto_disponible") REFERENCES "producto_disponible" ("id_producto_disponible"),
+  CONSTRAINT "resultadoProductosDisp_resultado_FK" FOREIGN KEY ("id_result") REFERENCES "resultado" ("id_result")
+);
