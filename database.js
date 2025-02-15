@@ -156,21 +156,17 @@ async function setRemember(level, data) {
 }
 
 async function createResult(data) {
-    // Inserta en la tabla RESULTADO en SQL
-    const connection = await initDatabase();
-    const [result] = await connection.execute('INSERT INTO RESULTADO(id_nivel, id_producto, date, name, tiempo) VALUES( ? , ? , ? , ? , ? , ? )', [
-        data.level, // id_nivel
-        data.id_producto, // id_prod_disp   // aca deberia pasar cada id???????????????????????????????????????????
-        new Date(), // date (fecha actual)
-        data.name, // name (nombre del resultado)
-        0, // tiempo (inicialmente en 0)
-    ]);
-    const lastInsertId = await connection.execute('SELECT LAST_INSERT_ID() LIMIT 1');
-    await connection.end();
-    // Devuelve el id del resultado insertado
-    return lastInsertId;
+    try {
+        const connection = await initDatabase();
+        const [result] = await connection.execute('INSERT INTO resultado(id_nivel, fecha, nombre_persona, tiempo) VALUES( ? , ? , ? , ? )', [data.level, new Date(), data.name, 0]);
+        const lastInsertId = await connection.execute('SELECT LAST_INSERT_ID() LIMIT 1');
+        await connection.end();
+        return lastInsertId;
+    } catch (error) {
+        console.error("Error al crear resultado:", error);
+        throw error;
+    }
 }
-
 async function updateResult(id, data) {
     const connection = await initDatabase();
     if (data.porcentaje != null) {
@@ -193,7 +189,7 @@ async function updateResult(id, data) {
                 });
             }
             const productosStr = JSON.stringify(prod);
-            updates.push(connection.execute('UPDATE resultado SET id_producto = ? WHERE id_result = ?', [productosStr, id]));
+            updates.push(connection.execute('INSERT resultadoProductoDisp SET id_producto = ? WHERE id_result = ?', [productosStr, id]));
         }
         await Promise.all(updates);
     }
