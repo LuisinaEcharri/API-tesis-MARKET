@@ -249,6 +249,7 @@ async function updateLevel(level, shelf, products) {
     const connection = await initDatabase();
     console.log('entro258');
     let keys = Object.keys(products);
+    let cantidad = 0;
     for (let e of keys) {
         if (products[e] > 0) {
             console.log('entro 263');
@@ -259,15 +260,17 @@ async function updateLevel(level, shelf, products) {
             for (let i = 0; i < products[e]; i++) {
                 nombre = (e + "-" + cant)
                 if (nombre != '') {
-                    console.log(products[e]);
+                    console.log('cantidad', products[e]);
+                    cantidad = products[e];
                     const [existe] = await connection.execute(
                         'SELECT pe.id_producto FROM producto_estanteria pe JOIN producto p ON pe.id_producto=p.id_producto WHERE pe.id_estanteria = ? AND pe.id_nivel = ? AND p.nombre_prod = ?', [parseInt(shelf), level, e]
                     );
 
                     if (existe && existe.length > 0) {
                         // Si existe, actualizar nombre y cantidad
+                        console.log('entro UPDATE')
                         await connection.execute(
-                            'UPDATE producto_estanteria SET nombre = ?, cant_producto = ? WHERE id_estanteria = ? AND id_producto = ? AND id_nivel = ?', [nombre, cant, parseInt(shelf), existe[0].id_producto, level]
+                            'UPDATE producto_estanteria SET nombre = ?, cant_producto = ? WHERE id_estanteria = ? AND id_producto = ? AND id_nivel = ?', [nombre, cantidad, parseInt(shelf), existe[0].id_producto, level]
                         );
                     } else {
                         const [prod] = await connection.execute(
@@ -279,9 +282,9 @@ async function updateLevel(level, shelf, products) {
                             producto = id_producto;
                         });
                         // Si no existe, insertar (simulando el merge)
-                        console.log(producto, nombre, cant, level, parseInt(shelf));
+                        console.log('entro insert');
                         await connection.execute(
-                            'INSERT INTO producto_estanteria (id_estanteria, id_producto, nombre, cant_producto, id_nivel) VALUES (?, ?, ?, ?,?)', [parseInt(shelf), producto, nombre, cant, level]
+                            'INSERT INTO producto_estanteria (id_estanteria, id_producto, nombre, cant_producto, id_nivel) VALUES (?, ?, ?, ?,?)', [parseInt(shelf), producto, nombre, cantidad, level]
                         );
                     }
                 }
@@ -392,10 +395,10 @@ async function updateToRemember(level, products, newLevel) {
             const [productodisp] = await connection.execute('SELECT 1 FROM producto_disponible WHERE id_producto = ? AND id_nivel = ?', [idproducto[0].id_producto, level]);
             console.log('entro prodisp')
             if (productodisp.length > 0) {
-                console.log('entro producto')
+                console.log('entro update')
                     // Actualizar producto existente
                 await connection.execute(
-                    'UPDATE producto_disponible SET cantidad = ? , max = ? WHERE id_producto = ? ', [prod.cantidad, prod.max, idproducto[0].id_producto]
+                    'UPDATE producto_disponible SET cantidad = ? , max = ? WHERE id_producto = ? AND id_nivel = ?', [prod.cantidad, prod.max, idproducto[0].id_producto, level]
                 );
             } else {
                 console.log('entro insert')
