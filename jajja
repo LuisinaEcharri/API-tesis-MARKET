@@ -4,6 +4,7 @@ CREATE TABLE "estanteria" (
   "id_estanteria" int NOT NULL AUTO_INCREMENT,
   "max" int NOT NULL,
   "cantidad" int NOT NULL,
+  "gondola" varchar(100) NOT NULL,
   PRIMARY KEY ("id_estanteria")
 );
 
@@ -14,7 +15,11 @@ CREATE TABLE "nivel" (
   "id_nivel" int NOT NULL,
   "nombre_nivel" varchar(50) NOT NULL,
   "dificultad" int NOT NULL,
-  PRIMARY KEY ("id_nivel")
+  "id_experimentador" int NOT NULL,
+  "activo" tinyint(1) NOT NULL DEFAULT '0',
+  PRIMARY KEY ("id_nivel"),
+  KEY "fk_nivel_experimentador" ("id_experimentador"),
+  CONSTRAINT "fk_nivel_experimentador" FOREIGN KEY ("id_experimentador") REFERENCES "experimentador" ("id_experimentador")
 );
 
 
@@ -24,15 +29,27 @@ CREATE TABLE "producto" (
   "id_producto" int NOT NULL AUTO_INCREMENT,
   "nombre_prod" varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
   "img" mediumblob,
+  "current" int NOT NULL DEFAULT '0',
+  "max" int NOT NULL,
   PRIMARY KEY ("id_producto")
+);
+
+
+-- defaultdb.experimentador definition
+
+CREATE TABLE "experimentador" (
+  "id_experimentador" int NOT NULL,
+  "nombre" varchar(100) NOT NULL,
+  "celular" int NOT NULL,
+  "clave" varchar(100) NOT NULL,
+  PRIMARY KEY ("id_experimentador")
 );
 
 
 -- defaultdb.producto_disponible definition
 
 CREATE TABLE "producto_disponible" (
-  "id_producto_disponible" int NOT NULL,
-  "nombre_prod_disp" varchar(50) NOT NULL,
+  "id_producto_disponible" int NOT NULL AUTO_INCREMENT,
   "cantidad" int NOT NULL DEFAULT '0',
   "max" int NOT NULL DEFAULT '25',
   "id_producto" int NOT NULL,
@@ -48,11 +65,12 @@ CREATE TABLE "producto_disponible" (
 -- defaultdb.producto_estanteria definition
 
 CREATE TABLE "producto_estanteria" (
-  "id_producto_estanteria" int NOT NULL,
+  "id_producto_estanteria" int NOT NULL AUTO_INCREMENT,
   "id_estanteria" int NOT NULL,
   "id_producto" int NOT NULL,
   "cant_producto" int DEFAULT NULL,
   "id_nivel" int NOT NULL,
+  "nombre" varchar(100) DEFAULT NULL,
   PRIMARY KEY ("id_producto_estanteria"),
   KEY "productoEstanteria_estanteria_FK" ("id_estanteria"),
   KEY "productoEstanteria_nivel_FK" ("id_nivel"),
@@ -89,7 +107,6 @@ CREATE TABLE "resultadoProductosDisp" (
   CONSTRAINT "resultadoProductosDisp_producdisp_FK" FOREIGN KEY ("id_producto_disponible") REFERENCES "producto_disponible" ("id_producto_disponible"),
   CONSTRAINT "resultadoProductosDisp_resultado_FK" FOREIGN KEY ("id_result") REFERENCES "resultado" ("id_result")
 );
-
 insert estanteria:
 INSERT INTO defaultdb.estanteria
 (id_estanteria, max, cantidad, gondola)
@@ -163,3 +180,11 @@ VALUES(23, 25, 0, '23');
 INSERT INTO defaultdb.estanteria
 (id_estanteria, max, cantidad, gondola)
 VALUES(24, 25, 0, '24');
+
+DELETE FROM resultadoProductosDisp;
+DELETE FROM resultado;
+DELETE FROM producto_disponible; 
+DELETE FROM producto_estanteria; 
+DELETE FROM producto; 
+DELETE FROM nivel;
+DELETE FROM experimentador;

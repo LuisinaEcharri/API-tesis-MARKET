@@ -1,6 +1,5 @@
 const mysql = require('mysql2/promise');
 const fs = require('fs');
-const bcrypt = require('bcrypt');
 const { isGeneratorObject } = require('util/types');
 const { config } = require('process');
 const { console } = require('inspector');
@@ -449,57 +448,4 @@ async function getShelvesConfig() {
 
 }
 
-async function login(dni, password) {
-    const connection = await initDatabase();
-    try {
-        const [rows] = await connection.execute(
-            'SELECT * FROM experimentador WHERE id_experimentador = ?', [dni]
-        );
-        console.log('login: ', rows[0])
-        if (rows.length === 0) {
-            return { success: false, message: 'DNI o contraseña incorrectos' };
-        }
-
-        const experimentador = rows[0];
-        console.log('experimentador clave:', experimentador.clave);
-        console.log('experimentador :', experimentador);
-        const passwordMatch = await bcrypt.compare(password, experimentador.clave);
-
-        if (!passwordMatch) {
-            return { success: false, message: 'DNI o contraseña incorrectos' };
-        }
-
-        return { success: true };
-    } catch (error) {
-        console.error('Login error:', error);
-        return { success: false, message: 'Error interno del servidor' };
-    } finally {
-        await connection.end();
-    }
-}
-
-
-async function registro(dni, nombre, password, celular) {
-    const connection = await initDatabase();
-    try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        console.log('id_experimentador:', dni);
-        console.log('celular:', celular);
-        console.log('password:', password);
-        console.log('nombre:', nombre);
-        console.log('hashedPassword:', hashedPassword);
-        await connection.execute(
-            'INSERT INTO experimentador (id_experimentador, nombre, clave, celular) VALUES (?, ?, ?, ?)', [dni, nombre, hashedPassword, celular]
-        );
-        console.log('inserto');
-        return { success: true };
-    } catch (error) {
-        console.error('Error en registrato:', error);
-        return { success: false, message: 'Error al registrar el usuario' };
-    } finally {
-        await connection.end();
-    }
-}
-
-
-module.exports = { getAll, getLevel, getRemember, setRemember, createResult, updateResult, searchResults, updateLevel, existsLevel, createLevel, updateToRemember, getShelvesConfig, login, registro }
+module.exports = { getAll, getLevel, getRemember, setRemember, createResult, updateResult, searchResults, updateLevel, existsLevel, createLevel, updateToRemember, getShelvesConfig }
