@@ -9,17 +9,14 @@ CREATE TABLE "estanteria" (
 );
 
 
--- defaultdb.nivel definition
+-- defaultdb.experimentador definition
 
-CREATE TABLE "nivel" (
-  "id_nivel" int NOT NULL,
-  "nombre_nivel" varchar(50) NOT NULL,
-  "dificultad" int NOT NULL,
+CREATE TABLE "experimentador" (
   "id_experimentador" int NOT NULL,
-  "activo" tinyint(1) NOT NULL DEFAULT '0',
-  PRIMARY KEY ("id_nivel"),
-  KEY "fk_nivel_experimentador" ("id_experimentador"),
-  CONSTRAINT "fk_nivel_experimentador" FOREIGN KEY ("id_experimentador") REFERENCES "experimentador" ("id_experimentador")
+  "nombre" varchar(100) NOT NULL,
+  "celular" bigint NOT NULL,
+  "clave" varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+  PRIMARY KEY ("id_experimentador")
 );
 
 
@@ -35,14 +32,17 @@ CREATE TABLE "producto" (
 );
 
 
--- defaultdb.experimentador definition
+-- defaultdb.nivel definition
 
-CREATE TABLE "experimentador" (
+CREATE TABLE "nivel" (
+  "id_nivel" int NOT NULL,
+  "nombre_nivel" varchar(50) NOT NULL,
+  "dificultad" int NOT NULL,
   "id_experimentador" int NOT NULL,
-  "nombre" varchar(100) NOT NULL,
-  "celular" int NOT NULL,
-  "clave" varchar(100) NOT NULL,
-  PRIMARY KEY ("id_experimentador")
+  "activo" tinyint(1) NOT NULL DEFAULT '0',
+  PRIMARY KEY ("id_nivel"),
+  KEY "fk_nivel_experimentador" ("id_experimentador"),
+  CONSTRAINT "fk_nivel_experimentador" FOREIGN KEY ("id_experimentador") REFERENCES "experimentador" ("id_experimentador")
 );
 
 
@@ -107,6 +107,8 @@ CREATE TABLE "resultadoProductosDisp" (
   CONSTRAINT "resultadoProductosDisp_producdisp_FK" FOREIGN KEY ("id_producto_disponible") REFERENCES "producto_disponible" ("id_producto_disponible"),
   CONSTRAINT "resultadoProductosDisp_resultado_FK" FOREIGN KEY ("id_result") REFERENCES "resultado" ("id_result")
 );
+
+
 insert estanteria:
 INSERT INTO defaultdb.estanteria
 (id_estanteria, max, cantidad, gondola)

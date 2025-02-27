@@ -20,9 +20,9 @@ async function initDatabase() {
 }
 
 // Consulta SQL para obtener todos los productos y niveles
-async function getAll() {
+async function getAll(dni) {
     const connection = await initDatabase();
-    const [rows] = await connection.execute('SELECT DISTINCT(pd.id_producto_disponible), n.id_nivel, n.nombre_nivel, n.dificultad, p.id_producto, p.nombre_prod, pd.cantidad,pd.max, e.id_estanteria, e.gondola FROM nivel n JOIN producto_disponible pd ON n.id_nivel = pd.id_nivel JOIN producto p ON pd.id_producto = p.id_producto JOIN producto_estanteria pe ON pe.id_nivel = n.id_nivel JOIN estanteria e ON e.id_estanteria = pe.id_estanteria');
+    const [rows] = await connection.execute('SELECT DISTINCT(pd.id_producto_disponible), n.id_nivel, n.nombre_nivel, n.dificultad, p.id_producto, p.nombre_prod, pd.cantidad,pd.max, e.id_estanteria, e.gondola FROM nivel n JOIN producto_disponible pd ON n.id_nivel = pd.id_nivel JOIN producto p ON pd.id_producto = p.id_producto JOIN producto_estanteria pe ON pe.id_nivel = n.id_nivel JOIN estanteria e ON e.id_estanteria = pe.id_estanteria WHERE n.id_experimentador = ? and n.activo = 1', [dni]);
     // Crear un objeto para agrupar por niveles 
     const levels = {};
 
@@ -61,7 +61,7 @@ async function getAll() {
 
     });
 
-    const [segunda] = await connection.execute('SELECT n.id_nivel,pe.id_estanteria, pe.id_producto_estanteria, pe.cant_producto FROM nivel n JOIN producto_estanteria pe ON n.id_nivel = pe.id_nivel JOIN producto p ON pe.id_producto = p.id_producto ORDER BY n.nombre_nivel');
+    const [segunda] = await connection.execute('SELECT n.id_nivel,pe.id_estanteria, pe.id_producto_estanteria, pe.cant_producto FROM nivel n JOIN producto_estanteria pe ON n.id_nivel = pe.id_nivel JOIN producto p ON pe.id_producto = p.id_producto WHERE n.id_experimentador = ?  AND n.activo = 1 ORDER BY n.nombre_nivel', [dni]);
     segunda.forEach(row => {
         const { id_nivel, id_estanteria, id_producto_estanteria, cant_producto } = row;
         if (levels[id_nivel] && levels[id_nivel].shelves && levels[id_nivel].shelves[id_estanteria]) {
@@ -77,9 +77,9 @@ async function getAll() {
 
 }
 
-async function getRemember(level) {
+async function getRemember(level, dni) {
     const connection = await initDatabase();
-    const [results] = await connection.execute('SELECT pd.id_producto, pd.cantidad, pd.max, p.nombre_prod FROM producto_disponible pd JOIN producto p ON pd.id_producto = p.id_producto JOIN nivel n ON pd.id_nivel = n.id_nivel WHERE n.id_nivel = ?', [level]); // Pasar level como parámetro
+    const [results] = await connection.execute('SELECT pd.id_producto, pd.cantidad, pd.max, p.nombre_prod FROM producto_disponible pd JOIN producto p ON pd.id_producto = p.id_producto JOIN nivel n ON pd.id_nivel = n.id_nivel WHERE n.dificultad = ? AND id_experimentador = ? AND n.activo = 1', [level, dni]); // Pasar level como parámetro
 
     if (results.length > 0) {
         const availableProducts = {};
@@ -105,9 +105,11 @@ async function getRemember(level) {
     return [];
 }
 
-async function getLevel(level) {
+async function getLevel(level, dni) {
     const connection = await initDatabase();
-    const [rows] = await connection.execute('SELECT pe.id_estanteria, e.max, e.gondola,pe.id_producto, pe.id_producto_estanteria, pe.nombre, pe.cant_producto FROM producto_estanteria pe JOIN estanteria e ON pe.id_estanteria=e.id_estanteria JOIN producto p ON pe.id_producto = p.id_producto WHERE pe.id_nivel = ?', [level]);
+    console.log('getlevel level',level);
+    console.log('getlevel dni',dni);
+    const [rows] = await connection.execute('SELECT pe.id_estanteria, e.max, e.gondola,pe.id_producto, pe.id_producto_estanteria, pe.nombre, pe.cant_producto FROM producto_estanteria pe JOIN estanteria e ON pe.id_estanteria=e.id_estanteria JOIN producto p ON pe.id_producto = p.id_producto JOIN nivel n ON pe.id_nivel=n.id_nivel WHERE n.dificultad = ? AND n.id_experimentador = ? AND activo = 1', [level, dni]);
     const shelves = {};
     rows.forEach(row => {
         const { id_estanteria, max, gondola, id_producto, id_producto_estanteria, nombre, cant_producto } = row;
@@ -132,21 +134,23 @@ async function getLevel(level) {
     return Object.values(shelves);
 }
 
-async function setRemember(level, data) {
+async function setRemember(level, data, dni) {
     // Crear la conexión a MySQL
 
     const connection = await initDatabase();
     // Preparar los datos que se van a actualizar
     const rememberProducts = data.remember; // Suponemos que data.remember es un array de productos
+    const [nivel]= await connection.execute(
+        'SELECT id_nivel FROM nivel  WHERE dificultad = ? AND id_experimentador = ? AND activo = 1', [level, dni]
+    );
 
     // Hacer la actualización por cada producto en el nivel
     for (let product of rememberProducts) {
         const { id_producto, cantidad } = product; // Asumiendo que estos campos existen en los datos
-
         // Actualizar el producto en la base de datos MySQL
         const query = 'UPDATE producto_disponible SET cantidad = ? WHERE id_producto = ? AND id_nivel = ?';
 
-        await connection.execute(query, [cantidad, id_producto, level]);
+        await connection.execute(query, [cantidad, id_producto, nivel[0].id_nivel]);
     }
 
     // Cerrar la conexión
@@ -156,10 +160,13 @@ async function setRemember(level, data) {
     return true;
 }
 
-async function createResult(data) {
+async function createResult(data, dni) {
     try {
         const connection = await initDatabase();
-        const [result] = await connection.execute('INSERT INTO resultado(id_nivel, fecha, nombre_persona, tiempo) VALUES( ? , ? , ? , ? )', [data.level, new Date(), data.name, 0]);
+        const [nivel]= await connection.execute(
+            'SELECT id_nivel FROM nivel  WHERE dificultad = ? AND id_experimentador = ? AND activo = 1', [data.level, dni]
+        );
+        const [result] = await connection.execute('INSERT INTO resultado(id_nivel, fecha, nombre_persona, tiempo) VALUES( ? , ? , ? , ? )', [nivel[0].id_nivel, new Date(), data.name, 0]);
         const lastInsertId = await connection.execute('SELECT LAST_INSERT_ID() LIMIT 1');
         await connection.end();
         return lastInsertId;
@@ -198,12 +205,12 @@ async function updateResult(id, data) {
     return 'Updated';
 }
 
-async function searchResults(name) {
+async function searchResults(dni,name) {
     const connection = await initDatabase();
     console.log('entro');
     const resultados = {};
     if (name) {
-        const [results] = await connection.execute('SELECT r.id_result, r.fecha, r.nombre_persona, r.tiempo, n.nombre_nivel FROM resultado r JOIN nivel n ON r.id_nivel = n.id_nivel WHERE nombre_persona = ? ORDER BY fecha DESC LIMIT 10', [name]);
+        const [results] = await connection.execute('SELECT r.id_result, r.fecha, r.nombre_persona, r.tiempo, n.nombre_nivel FROM resultado r JOIN nivel n ON r.id_nivel = n.id_nivel WHERE nombre_persona = ? AND n.id_experimentador = ? ORDER BY fecha DESC LIMIT 10', [name, dni]);
 
 
         if (results && results.length > 0) { // Verifica si results existe y tiene elementos
@@ -222,7 +229,7 @@ async function searchResults(name) {
             });
         }
     } else {
-        const [results] = await connection.execute('SELECT r.id_result, r.fecha, r.nombre_persona, r.tiempo, n.nombre_nivel FROM resultado r JOIN nivel n ON r.id_nivel = n.id_nivel ORDER BY fecha DESC LIMIT 10');
+        const [results] = await connection.execute('SELECT r.id_result, r.fecha, r.nombre_persona, r.tiempo, n.nombre_nivel FROM resultado r JOIN nivel n ON r.id_nivel = n.id_nivel WHERE n.id_experimentador = ? ORDER BY fecha DESC LIMIT 10', [dni]);
 
 
         if (results && results.length > 0) { // Verifica si results existe y tiene elementos
@@ -246,7 +253,7 @@ async function searchResults(name) {
     return Object.values(resultados);
 }
 
-async function updateLevel(level, shelf, products) {
+async function updateLevel(level, shelf, products, dni) {
     const connection = await initDatabase();
     console.log('entro258');
     let keys = Object.keys(products);
@@ -261,33 +268,34 @@ async function updateLevel(level, shelf, products) {
             for (let i = 0; i < products[e]; i++) {
                 nombre = (e + "-" + cant)
                 if (nombre != '') {
-                    console.log('cantidad', products[e]);
-                    cantidad = products[e];
-                    const [existe] = await connection.execute(
-                        'SELECT pe.id_producto FROM producto_estanteria pe JOIN producto p ON pe.id_producto=p.id_producto WHERE pe.id_estanteria = ? AND pe.id_nivel = ? AND p.nombre_prod = ?', [parseInt(shelf), level, e]
-                    );
+                    // console.log('cantidad', products[e]);
+                    // cantidad = products[e];
+                    // const [existe] = await connection.execute(
+                    //     'SELECT pe.id_producto FROM producto_estanteria pe JOIN producto p ON pe.id_producto=p.id_producto WHERE pe.id_estanteria = ? AND pe.id_nivel = ? AND p.nombre_prod = ?', [parseInt(shelf), level, e]
+                    // );
 
-                    if (existe && existe.length > 0) {
-                        // Si existe, actualizar nombre y cantidad
-                        console.log('entro UPDATE')
-                        await connection.execute(
-                            'UPDATE producto_estanteria SET nombre = ?, cant_producto = ? WHERE id_estanteria = ? AND id_producto = ? AND id_nivel = ?', [nombre, cantidad, parseInt(shelf), existe[0].id_producto, level]
-                        );
-                    } else {
-                        const [prod] = await connection.execute(
-                            'SELECT id_producto FROM producto  WHERE nombre_prod = ?', [e]
-                        );
-                        let producto
-                        prod.forEach(row => {
-                            const { id_producto } = row;
-                            producto = id_producto;
-                        });
-                        // Si no existe, insertar (simulando el merge)
-                        console.log('entro insert');
-                        await connection.execute(
-                            'INSERT INTO producto_estanteria (id_estanteria, id_producto, nombre, cant_producto, id_nivel) VALUES (?, ?, ?, ?,?)', [parseInt(shelf), producto, nombre, cantidad, level]
-                        );
-                    }
+                    // if (existe && existe.length > 0) {
+                    //     // Si existe, actualizar nombre y cantidad
+                    //     console.log('entro UPDATE')
+                    //     await connection.execute(
+                    //         'UPDATE producto_estanteria SET nombre = ?, cant_producto = ? WHERE id_estanteria = ? AND id_producto = ? AND id_nivel = ?', [nombre, cantidad, parseInt(shelf), existe[0].id_producto, level]
+                    //     );
+                    // } else {
+                        
+                    const [prod] = await connection.execute(
+                        'SELECT id_producto FROM producto  WHERE nombre_prod = ?', [e]
+                    );
+                    let producto;
+                    prod.forEach(row => {
+                        const { id_producto } = row;
+                        producto = id_producto;
+                    });
+                    const [nivel]= await connection.execute(
+                        'SELECT id_nivel FROM nivel  WHERE dificultad = ? AND id_experimentador = ? AND activo = 1', [level, dni]
+                    );
+                    await connection.execute('INSERT INTO producto_estanteria (id_estanteria, id_producto, nombre, cant_producto, id_nivel) VALUES (?, ?, ?, ?,?)', [parseInt(shelf), producto, nombre, cantidad, nivel[0].id_nivel]);
+                   
+                    
                 }
             }
         }
@@ -296,37 +304,41 @@ async function updateLevel(level, shelf, products) {
     await connection.end();
 }
 
-async function existsLevel(level) {
+async function existsLevel(level,dni) {
     const connection = await initDatabase();
     // Paso 1: Consultar si el nivel existe en la tabla 'nivel'
     const [rows] = await connection.execute(
-        `SELECT 1 FROM nivel WHERE id_nivel = ? LIMIT 1`, [level]
+        `SELECT 1 FROM nivel WHERE dificultad = ? AND id_experimentador = ? AND activo = 1  LIMIT 1`, [level, dni]
     );
+    console.log('existe nivel', rows[0]);
     await connection.end();
     // Paso 2: Si la consulta devuelve algún resultado, el nivel existe
     return rows.length > 0;
 
 }
 
-async function createLevel(level) {
+async function createLevel(level, dni) {
     const connection = await initDatabase();
-
+    await connection.execute('UPDATE nivel SET activo = ? WHERE dificultad  = ? AND id_experimentador = ? AND activo = 1', [0, level, dni]);
     // Paso 1: Crear el nivel
     await connection.execute(
-        `INSERT INTO nivel (id_nivel, dificultad, nombre_nivel) 
-         VALUES (?, ?, ?)`, [level, parseInt(level), "Nivel " + level]
+        `INSERT INTO nivel (dificultad, nombre_nivel, id_experimentador, activo) 
+         VALUES (?, ?, ?, 1)`, [parseInt(level), "Nivel " + level, dni]
     );
 
     // Cerrar la conexión
     await connection.end();
 }
 
-async function updateToRemember(level, products, newLevel) {
+async function updateToRemember(level, products, newLevel, dni) {
     const connection = await initDatabase();
     let productsList = {};
     let availableProducts = {};
     console.log('entro 334');
-    const [availableProductsRows] = await connection.execute('SELECT pd.id_producto_disponible, pd.id_producto, p.nombre_prod, pd.cantidad, p.max FROM producto_disponible pd JOIN producto p ON p.id_producto = pd.id_producto WHERE pd.id_nivel = ? ', [level]);
+    const [nivel]= await connection.execute(
+        'SELECT id_nivel FROM nivel  WHERE dificultad = ? AND id_experimentador = ? AND activo = 1', [level, dni]
+    );
+    const [availableProductsRows] = await connection.execute('SELECT pd.id_producto_disponible, pd.id_producto, p.nombre_prod, pd.cantidad, p.max FROM producto_disponible pd JOIN producto p ON p.id_producto = pd.id_producto WHERE pd.id_nivel = ? ', [nivel[0].id_nivel]);
     console.log('entro 337');
     if (availableProductsRows && availableProductsRows > 0) { // Verifica si results existe y tiene elementos
         console.log('entro336');
@@ -392,20 +404,23 @@ async function updateToRemember(level, products, newLevel) {
         console.log('entro87');
         for (const prod of result) {
             console.log(prod.nombre);
+            const [nivel]= await connection.execute(
+                'SELECT id_nivel FROM nivel  WHERE dificultad = ? AND id_experimentador = ? AND activo = 1', [level, dni]
+            );
             const [idproducto] = await connection.execute('SELECT id_producto FROM producto WHERE nombre_prod = ?', [prod.nombre]);
-            const [productodisp] = await connection.execute('SELECT 1 FROM producto_disponible WHERE id_producto = ? AND id_nivel = ?', [idproducto[0].id_producto, level]);
+            const [productodisp] = await connection.execute('SELECT 1 FROM producto_disponible pd JOIN nivel n ON pd.id_nivel = n.id_nivel WHERE pd.id_producto = ? AND n.id_nivel = ? AND n.id_experimentador = ? AND n.activo = 1', [idproducto[0].id_producto, nivel[0].id_nivel, dni]);
             console.log('entro prodisp')
             if (productodisp.length > 0) {
                 console.log('entro update')
                     // Actualizar producto existente
                 await connection.execute(
-                    'UPDATE producto_disponible SET cantidad = ? , max = ? WHERE id_producto = ? AND id_nivel = ?', [prod.cantidad, prod.max, idproducto[0].id_producto, level]
+                    'UPDATE producto_disponible SET cantidad = ? , max = ? WHERE id_producto = ? AND id_nivel = ?', [prod.cantidad, prod.max, idproducto[0].id_producto, nivel[0].id_nivel]
                 );
             } else {
                 console.log('entro insert')
                     // Insertar nuevo producto y relación nivel-producto
                 await connection.execute(
-                    'INSERT INTO producto_disponible (id_producto, cantidad, max, id_nivel) VALUES( ? , ? , ? , ? )', [idproducto[0].id_producto, prod.cantidad, prod.max, level]
+                    'INSERT INTO producto_disponible (id_producto, cantidad, max, id_nivel) VALUES( ? , ? , ? , ? )', [idproducto[0].id_producto, prod.cantidad, prod.max, nivel[0].id_nivel]
                 );
             }
         }
